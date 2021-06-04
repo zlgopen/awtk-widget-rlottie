@@ -28,8 +28,10 @@ static ret_t on_asset_changed(void* ctx, event_t* e) {
   widget_t* rlottie = widget_lookup(WIDGET(ctx), "rlottie", TRUE);
   const char* name = combo_box_get_text(assets);
 
+  tk_mem_dump(); 
   rlottie_set_url(rlottie, name);
   log_debug("%s\n", name);
+  tk_mem_dump(); 
 
   return RET_OK;
 }
