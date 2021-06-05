@@ -180,9 +180,8 @@ static ret_t rlottie_on_paint_self(widget_t* widget, canvas_t* c) {
     double ratio = system_info()->device_pixel_ratio;
 
     if (b->w > widget->w * ratio || b->h > widget->h * ratio) {
-      rect_t src = rect_init(0, 0, b->w, b->h);
       rect_t dst = rect_init(0, 0, widget->w, widget->h);
-      canvas_draw_image_scale_down(c, b, &src, &dst);
+      canvas_draw_image_ex(c, b, IMAGE_DRAW_SCALE_DOWN, &dst);
     } else {
       int32_t cx = widget->w >> 1;
       int32_t cy = widget->h >> 1;

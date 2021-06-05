@@ -13,14 +13,15 @@ CPPPATH=[
 ]
 
 APP_CXXFLAGS = '-DAWTK=1 '
+APP_CFLAGS=' -DRLOTTIE_BUILD '
 
 if platform.system() == 'Windows':
-  APP_CXXFLAGS += ' /std:c++17 '
+  APP_CXXFLAGS += ' /std:c++17 -DRLOTTIE_BUILD '
 else:
   APP_CXXFLAGS += ' -std=c++17 '
 
-helper.add_cpppath(CPPPATH).add_cxxflags(APP_CXXFLAGS)
+helper.add_cpppath(CPPPATH).add_cxxflags(APP_CXXFLAGS).add_cflags(APP_CFLAGS)
 helper.set_dll_def('src/rlottie.def').set_libs(['rlottie']).call(DefaultEnvironment)
 
-SConscriptFiles = ['src/SConscript', 'demos/SConscript', 'tests/SConscript']
+SConscriptFiles = ['src/SConscript', 'demos/SConscript']
 SConscript(SConscriptFiles)
