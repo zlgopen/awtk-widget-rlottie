@@ -165,7 +165,11 @@ widget_t* rlottie_cast(widget_t* widget);
 
 /**
  * @method rlottie_set_url
- * 设置 资源。
+ * 设置资源的URL。
+ * 
+ * > 使用本地文件时，请在file://后紧跟文件名。如:file://./data/heart.json
+ * > 使用资源时，指定文件名即可，请把资源文件放到design/default/data/目录里。
+ * 
  * @annotation ["scriptable"]
  * @param {widget_t*} widget widget对象。
  * @param {const char*} url 资源。

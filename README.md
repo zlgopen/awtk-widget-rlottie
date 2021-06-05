@@ -1,8 +1,8 @@
 # awtk-widget-rlottie
 
-[Lottie](https://airbnb.design/lottie)  是一个超级强大的动画库，众多工具可以创建并导出 [Lottie](https://airbnb.design/lottie) 格式的动画。 [Lottie](https://airbnb.design/lottie) 用 JSON 描述动画，与比 gif 等图片动画相比，体积大大减小。如果性能跟得上，是做动画的不错选择。借助三星开源的 [rlottie](https://github.com/Samsung/rlottie) 库，AWTK 可以直接播放 Lottie 动画。
+[Lottie](https://airbnb.design/lottie)  是一个超级强大的动画库，众多工具可以创建并导出 [Lottie](https://airbnb.design/lottie) 格式的动画。 [Lottie](https://airbnb.design/lottie) 用 JSON 描述动画，与比 gif 等图片动画相比，体积大大减小。如果性能跟得上，是做动画的不错选择。借助三星开源的 [rlottie](https://github.com/Samsung/rlottie) 库，AWTK 可以直接播放 [Lottie](https://airbnb.design/lottie)  动画。
 
-rlottie player 控件是基于 [rlottie](https://github.com/Samsung/rlottie) 实现的 [Lottie](https://airbnb.design/lottie/) 播放器。
+[rlottie player](https://github.com/zlgopen/awtk-widget-rlottie) 控件是基于 [rlottie](https://github.com/Samsung/rlottie) 实现的 [Lottie](https://airbnb.design/lottie/) 播放器。
 
 ![](docs/images/ui.png)
 
@@ -65,4 +65,10 @@ scons LINUX_FB=true
 
 ## 文档
 
-[完善自定义控件](https://github.com/zlgopen/awtk-widget-generator/blob/master/docs/improve_generated_widget.md)
+* 在 XML 创建的方法
+
+```xml
+  <rlottie x="c" y="m" w="600" h="400" name="rlottie" url="heart.json"/>
+```
+
+* [完善自定义控件](https://github.com/zlgopen/awtk-widget-generator/blob/master/docs/improve_generated_widget.md)

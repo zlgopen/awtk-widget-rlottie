@@ -21,3 +21,4 @@ res
 idl
 *.pyc
 bin/uses_sdk.json
+src/rlottie.def
