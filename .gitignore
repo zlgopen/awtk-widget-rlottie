@@ -32,3 +32,5 @@ bin/demo
 .vs
 res
 idl
+*.pyc
+bin/uses_sdk.json

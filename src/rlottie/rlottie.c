@@ -24,9 +24,6 @@
 #include "tkc/utils.h"
 #include "tkc/data_reader_factory.h"
 
-#ifdef WITH_NANOVG_SOFT
-static ret_t rlottie_fix_bitmap(uint32_t* buff, int32_t w, int32_t h);
-#else
 /*ARGB32 --> RGBA32*/
 static ret_t rlottie_fix_bitmap(uint32_t* buff, int32_t w, int32_t h) {
   int32_t i = 0;
@@ -41,7 +38,6 @@ static ret_t rlottie_fix_bitmap(uint32_t* buff, int32_t w, int32_t h) {
 
   return RET_OK;
 }
-#endif /*WITH_NANOVG_SOFT*/
 
 static ret_t rlottie_on_timer(const timer_info_t* info) {
   rlottie_t* rlottie = RLOTTIE(info->ctx);
