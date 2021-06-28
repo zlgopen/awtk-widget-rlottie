@@ -24,4 +24,4 @@ helper.add_cpppath(CPPPATH).add_cxxflags(APP_CXXFLAGS).add_cflags(APP_CFLAGS)
 helper.set_dll_def('src/rlottie.def').set_libs(['rlottie']).call(DefaultEnvironment)
 
 SConscriptFiles = ['src/SConscript', 'demos/SConscript']
-SConscript(SConscriptFiles)
+helper.SConscript(SConscriptFiles)
