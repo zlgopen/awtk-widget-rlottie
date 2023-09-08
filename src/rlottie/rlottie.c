@@ -48,7 +48,7 @@ static ret_t rlottie_on_timer(const timer_info_t* info) {
       bitmap_t* b = rlottie->bitmap;
       rlottie->index = (rlottie->index + 1) % rlottie->total_frames;
 
-      b->flags |= BITMAP_FLAG_CHANGED;
+      b->flags |= (BITMAP_FLAG_CHANGED | BITMAP_FLAG_PREMULTI_ALPHA);
       buff = (uint32_t*)bitmap_lock_buffer_for_write(b);
       lottie_animation_render(rlottie->animation, rlottie->index, buff, b->w, b->h, b->w * 4);
       rlottie_fix_bitmap(buff, b->w, b->h);
