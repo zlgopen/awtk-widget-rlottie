@@ -80,7 +80,7 @@ namespace renderer {
 
 using DrawableList = VSpan<VDrawable *>;
 
-enum class DirtyFlagBit : uchar {
+enum class DirtyFlagBit : uint8_t {
     None = 0x00,
     Matrix = 0x01,
     Alpha = 0x02,
@@ -207,6 +207,7 @@ private:
     VArenaAlloc                         mAllocator{2048};
     int                                 mCurFrameNo;
     bool                                mKeepAspectRatio{true};
+    bool                                mHasDynamicValue{false};
 };
 
 class Layer {
@@ -239,8 +240,8 @@ public:
     std::vector<LOTMask> &       cmasks() { return mCApiData->mMasks; }
     std::vector<LOTNode *> &     cnodes() { return mCApiData->mCNodeList; }
     const char *                 name() const { return mLayerData->name(); }
-    virtual bool                 resolveKeyPath(LOTKeyPath &keyPath, uint depth,
-                                                LOTVariant &value);
+    virtual bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
+                                LOTVariant &value);
 
 protected:
     virtual void   preprocessStage(const VRect &clip) = 0;
@@ -275,7 +276,7 @@ public:
     void render(VPainter *painter, const VRle &mask, const VRle &matteRle,
                 SurfaceCache &cache) final;
     void buildLayerNode() final;
-    bool resolveKeyPath(LOTKeyPath &keyPath, uint depth,
+    bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
                         LOTVariant &value) override;
 
 protected:
@@ -317,8 +318,10 @@ public:
     explicit ShapeLayer(model::Layer *layerData, VArenaAlloc *allocator);
     DrawableList renderList() final;
     void         buildLayerNode() final;
-    bool         resolveKeyPath(LOTKeyPath &keyPath, uint depth,
+    bool         resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
                                 LOTVariant &value) override;
+    void         render(VPainter *painter, const VRle &mask, const VRle &matteRle,
+                        SurfaceCache &cache) final;
 
 protected:
     void                     preprocessStage(const VRect &clip) final;
@@ -355,13 +358,13 @@ private:
 
 class Object {
 public:
-    enum class Type : uchar { Unknown, Group, Shape, Paint, Trim };
+    enum class Type : uint8_t { Unknown, Group, Shape, Paint, Trim };
     virtual ~Object() = default;
     Object &     operator=(Object &&) noexcept = delete;
     virtual void update(int frameNo, const VMatrix &parentMatrix,
                         float parentAlpha, const DirtyFlag &flag) = 0;
     virtual void renderList(std::vector<VDrawable *> &) {}
-    virtual bool resolveKeyPath(LOTKeyPath &, uint, LOTVariant &)
+    virtual bool resolveKeyPath(LOTKeyPath &, uint32_t, LOTVariant &)
     {
         return false;
     }
@@ -387,7 +390,7 @@ public:
         static const char *TAG = "__";
         return mModel.hasModel() ? mModel.name() : TAG;
     }
-    bool resolveKeyPath(LOTKeyPath &keyPath, uint depth,
+    bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
                         LOTVariant &value) override;
 
 protected:
@@ -532,7 +535,7 @@ public:
 
 protected:
     bool updateContent(int frameNo, const VMatrix &matrix, float alpha) final;
-    bool resolveKeyPath(LOTKeyPath &keyPath, uint depth,
+    bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
                         LOTVariant &value) final;
 
 private:
@@ -557,7 +560,7 @@ public:
 
 protected:
     bool updateContent(int frameNo, const VMatrix &matrix, float alpha) final;
-    bool resolveKeyPath(LOTKeyPath &keyPath, uint depth,
+    bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
                         LOTVariant &value) final;
 
 private:
