@@ -72,6 +72,17 @@ static bool strokeProp(rlottie::Property prop)
     }
 }
 
+static bool trimProp(rlottie::Property prop)
+{
+    switch (prop) {
+    case rlottie::Property::TrimStart:
+    case rlottie::Property::TrimEnd:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static renderer::Layer *createLayerItem(model::Layer *layerData,
                                         VArenaAlloc * allocator)
 {
@@ -436,8 +447,16 @@ void renderer::Layer::update(int frameNumber, const VMatrix &parentMatrix,
 
 VMatrix renderer::Layer::matrix(int frameNo) const
 {
+    return matrix(frameNo, 0);
+}
+
+VMatrix renderer::Layer::matrix(int frameNo, int depth) const
+{
+    // Prevent infinite recursion from cyclic parent references
+    if (depth > 64) return VMatrix{};
+
     return mParentLayer
-               ? (mLayerData->matrix(frameNo) * mParentLayer->matrix(frameNo))
+               ? (mLayerData->matrix(frameNo) * mParentLayer->matrix(frameNo, depth + 1))
                : mLayerData->matrix(frameNo);
 }
 
@@ -468,6 +487,7 @@ renderer::CompLayer::CompLayer(model::Layer *layerModel, VArenaAlloc *allocator)
     // as lottie model keeps the data in front-toback-order.
     for (auto it = mLayerData->mChildren.crbegin();
          it != mLayerData->mChildren.rend(); ++it) {
+        if ((*it)->type() != model::Object::Type::Layer) continue;
         auto model = static_cast<model::Layer *>(*it);
         auto item = createLayerItem(model, allocator);
         if (item) mLayers.push_back(item);
@@ -1306,9 +1326,9 @@ renderer::Stroke::Stroke(model::Stroke *data)
 static vthread_local std::vector<float> Dash_Vector;
 
 bool renderer::Stroke::updateContent(int frameNo, const VMatrix &matrix,
-                                     float)
+                                     float alpha)
 {
-    auto combinedAlpha = mModel.opacity(frameNo);
+    auto combinedAlpha = alpha * mModel.opacity(frameNo);
     auto color = mModel.color(frameNo).toColor(combinedAlpha);
 
     VBrush brush(color);
@@ -1366,6 +1386,21 @@ bool renderer::GradientStroke::updateContent(int frameNo, const VMatrix &matrix,
     return !vIsZero(combinedAlpha);
 }
 
+bool renderer::Trim::resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
+                                      LOTVariant &value)
+{
+    if (!keyPath.matches(mModel.name(), depth)) {
+        return false;
+    }
+
+    if (keyPath.fullyResolvesTo(mModel.name(), depth) &&
+        trimProp(value.property())) {
+        mModel.filter()->addValue(value);
+        return true;
+    }
+    return false;
+}
+
 void renderer::Trim::update(int frameNo, const VMatrix & /*parentMatrix*/,
                             float /*parentAlpha*/, const DirtyFlag & /*flag*/)
 {
@@ -1373,7 +1408,7 @@ void renderer::Trim::update(int frameNo, const VMatrix & /*parentMatrix*/,
 
     if (mCache.mFrameNo == frameNo) return;
 
-    model::Trim::Segment segment = mData->segment(frameNo);
+    model::Trim::Segment segment = mModel.segment(frameNo);
 
     if (!(vCompare(mCache.mSegment.start, segment.start) &&
           vCompare(mCache.mSegment.end, segment.end))) {

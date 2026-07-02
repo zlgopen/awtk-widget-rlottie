@@ -187,17 +187,17 @@ typedef struct SW_FT_Outline_Funcs_ {
 #define ONE_PIXEL (1L << PIXEL_BITS)
 #define PIXEL_MASK (-1L << PIXEL_BITS)
 #define TRUNC(x) ((TCoord)((x) >> PIXEL_BITS))
-#define SUBPIXELS(x) ((TPos)(x) << PIXEL_BITS)
+#define SUBPIXELS(x) ((TPos)((unsigned long)(x) << PIXEL_BITS))
 #define FLOOR(x) ((x) & -ONE_PIXEL)
 #define CEILING(x) (((x) + ONE_PIXEL - 1) & -ONE_PIXEL)
 #define ROUND(x) (((x) + ONE_PIXEL / 2) & -ONE_PIXEL)
 
 #if PIXEL_BITS >= 6
-#define UPSCALE(x) ((x) << (PIXEL_BITS - 6))
+#define UPSCALE(x)   ((TPos)((unsigned long)(x) << (PIXEL_BITS - 6)))
 #define DOWNSCALE(x) ((x) >> (PIXEL_BITS - 6))
 #else
-#define UPSCALE(x) ((x) >> (6 - PIXEL_BITS))
-#define DOWNSCALE(x) ((x) << (6 - PIXEL_BITS))
+#define UPSCALE(x)   ((x) >> (6 - PIXEL_BITS))
+#define DOWNSCALE(x) ((TPos)((unsigned long)(x) << (6 - PIXEL_BITS)))
 #endif
 
 /* Compute `dividend / divisor' and return both its quotient and     */
@@ -537,6 +537,10 @@ static void gray_render_line(RAS_ARG_ TPos to_x, TPos to_y)
     dx = to_x - ras.x;
     dy = to_y - ras.y;
 
+    if (SW_FT_ABS(dx) > 10000000 || SW_FT_ABS(dy) > 10000000) {
+         goto End;
+    }
+
     fx1 = ras.x - SUBPIXELS(ex1);
     fy1 = ras.y - SUBPIXELS(ey1);
 
@@ -707,6 +711,7 @@ static void gray_render_conic(RAS_ARG_ const SW_FT_Vector* control,
             gray_split_conic(arc);
             arc += 2;
             top++;
+            if (top >= 32) return; // levels size is 32
             levels[top] = levels[top - 1] = level - 1;
             continue;
         }
@@ -801,6 +806,8 @@ gray_render_cubic(RAS_ARG_ const SW_FT_Vector* control1,
       continue;
 
     Split:
+      if ( arc - ras.bez_stack >= 31 * 3 )
+        return; // bez_stack size is 32*3+1
       gray_split_cubic( arc );
       arc += 3;
     }
@@ -1011,7 +1018,7 @@ static int SW_FT_Outline_Decompose(const SW_FT_Outline*       outline,
                                    void*                      user)
 {
 #undef SCALED
-#define SCALED(x) (((x) << shift) - delta)
+#define SCALED(x) ((TPos)((unsigned long)(x) << shift) - delta)
 
     SW_FT_Vector v_last;
     SW_FT_Vector v_control;

@@ -250,11 +250,19 @@ void model::Gradient::populate(VGradientStops &stops, int frameNo)
     auto                  size = gradData.mGradient.size();
     float *               ptr = gradData.mGradient.data();
     int                   colorPoints = mColorPoints;
-    if (colorPoints == -1) {  // for legacy bodymovin (ref: lottie-android)
+    if (!ptr) return;
+    if (colorPoints > 0 && (size_t)colorPoints > size / 4) {
         colorPoints = int(size / 4);
     }
-    auto   opacityArraySize = size - colorPoints * 4;
-    float *opacityPtr = ptr + (colorPoints * 4);
+    if (colorPoints < 0) {  // for legacy bodymovin (ref: lottie-android)
+        colorPoints = int(size / 4);
+    }
+    size_t                colorPointsSize = (size_t)colorPoints * 4;
+    auto   opacityArraySize = size - colorPointsSize;
+    if (opacityArraySize % 2 != 0) {
+        opacityArraySize = 0;
+    }
+    float *opacityPtr = ptr + colorPointsSize;
     stops.clear();
     for (int i = 0; i < colorPoints; i++) {
         float        colorStop = ptr[0];
@@ -266,6 +274,10 @@ void model::Gradient::populate(VGradientStops &stops, int frameNo)
             stops.push_back(std::make_pair(colorStop, color.toColor()));
         }
         ptr += 4;
+    }
+
+    if (stops.empty()) {
+        stops.push_back(std::make_pair(0.0f, VColor(255, 255, 255, 255)));
     }
 }
 

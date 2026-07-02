@@ -13,14 +13,14 @@ extern "C" void pixman_composite_over_n_8888_asm_neon(int32_t w, int32_t h,
                                                       uint32_t  src);
 
 #ifdef MACOS
-//MACOS上pixman-arm-neon-asm.S编译不过。
+// MACOS 上 pixman-arm-neon-asm.S 编译不过。
 void memfill32(uint32_t *dest, uint32_t value, int length)
 {
-    // let compiler do the auto vectorization.
-    for (int i = 0 ; i < length; i++) {
+    for (int i = 0; i < length; i++) {
         *dest++ = value;
     }
 }
+
 void RenderFuncTable::neon()
 {
 }

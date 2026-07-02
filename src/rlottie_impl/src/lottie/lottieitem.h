@@ -223,6 +223,7 @@ public:
     virtual void update(int frameNo, const VMatrix &parentMatrix,
                         float parentAlpha);
     VMatrix      matrix(int frameNo) const;
+    VMatrix      matrix(int frameNo, int depth) const;
     void         preprocess(const VRect &clip);
     virtual DrawableList renderList() { return {}; }
     virtual void         render(VPainter *painter, const VRle &mask,
@@ -581,13 +582,16 @@ private:
 
 class Trim final : public Object {
 public:
-    explicit Trim(model::Trim *data) : mData(data) {}
+    explicit Trim(model::Trim *data) : mData(data), mModel(data) {}
     void update(int frameNo, const VMatrix &parentMatrix, float parentAlpha,
                 const DirtyFlag &flag) final;
     Object::Type type() const final { return Object::Type::Trim; }
     void         update();
     void         addPathItems(std::vector<Shape *> &list, size_t startOffset);
 
+protected:
+    bool resolveKeyPath(LOTKeyPath &keyPath, uint32_t depth,
+                        LOTVariant &value) final;
 private:
     bool pathDirty() const
     {
@@ -605,6 +609,8 @@ private:
     model::Trim *        mData{nullptr};
     VPathMesure          mPathMesure;
     bool                 mDirty{true};
+
+    model::Filter<model::Trim> mModel;
 };
 
 class Repeater final : public Group {

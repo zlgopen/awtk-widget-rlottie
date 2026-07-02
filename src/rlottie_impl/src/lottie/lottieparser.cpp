@@ -54,6 +54,8 @@
 // the parse.
 
 #include <array>
+#include <queue>
+#include <unordered_set>
 
 #include "lottiemodel.h"
 #include "rapidjson/document.h"
@@ -62,6 +64,16 @@
 RAPIDJSON_DIAG_PUSH
 #ifdef __GNUC__
 RAPIDJSON_DIAG_OFF(effc++)
+#endif
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shlwapi.h>
+
+#endif
+
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
 #endif
 
 using namespace rapidjson;
@@ -637,12 +649,48 @@ model::BlendMode LottieParserImpl::getBlendMode()
 
 void LottieParserImpl::resolveLayerRefs()
 {
+    // Build directed graph: assetId → direct precomp refIds.
+    // Then BFS from each asset to detect if it can reach itself (cycle).
+    std::unordered_set<std::string> cyclicAssets;
+    {
+        std::unordered_map<std::string, std::vector<std::string>> deps;
+        for (const auto &kv : compRef->mAssets) {
+            for (const auto &obj : kv.second->mLayers) {
+                if (obj->type() != model::Object::Type::Layer) continue;
+                auto layer = static_cast<model::Layer *>(obj);
+                if (layer->mLayerType == model::Layer::Type::Precomp &&
+                    layer->mExtra && !layer->mExtra->mPreCompRefId.empty()) {
+                    deps[kv.first].push_back(layer->mExtra->mPreCompRefId);
+                }
+            }
+        }
+        for (const auto &kv : deps) {
+            const std::string &           startId = kv.first;
+            std::unordered_set<std::string> visited;
+            std::queue<std::string>         q;
+            for (const auto &dep : kv.second) q.push(dep);
+            while (!q.empty()) {
+                std::string id = q.front(); q.pop();
+                if (id == startId) { cyclicAssets.insert(startId); break; }
+                if (!visited.insert(id).second) continue;
+                auto it = deps.find(id);
+                if (it != deps.end())
+                    for (const auto &dep : it->second) q.push(dep);
+            }
+        }
+    }
+
     for (const auto &layer : mLayersToUpdate) {
         auto search = compRef->mAssets.find(layer->extra()->mPreCompRefId);
         if (search != compRef->mAssets.end()) {
             if (layer->mLayerType == model::Layer::Type::Image) {
                 layer->extra()->mAsset = search->second;
             } else if (layer->mLayerType == model::Layer::Type::Precomp) {
+                if (cyclicAssets.count(search->first)) {
+                    vWarning << "Circular asset reference detected, ignoring: "
+                             << search->first;
+                    continue;
+                }
                 layer->mChildren = search->second->mLayers;
                 layer->setStatic(layer->isStatic() &&
                                  search->second->isStatic());
@@ -797,6 +845,102 @@ static std::string convertFromBase64(const std::string &str)
     return b64decode(b64Data, length);
 }
 
+namespace
+{
+   #ifdef _WIN32
+   std::wstring ToStdWString( const std::string& str )
+   {
+      std::wstring wstr;
+      int          nchars = ::MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.length(), 0, 0);
+      if ( nchars > 0 )
+      {
+        wstr.resize( nchars );
+        ::MultiByteToWideChar( CP_UTF8, 0, str.data(), (int)str.length(),
+                               const_cast<wchar_t *>( wstr.c_str() ),
+                                nchars );
+      }
+
+      return wstr;
+   }
+
+   std::string ToStdString( const std::wstring& wstr )
+   {
+       std::string str;
+       int         nchars = ::WideCharToMultiByte( CP_UTF8, 0, wstr.data(), (int)wstr.length(), NULL, NULL, NULL, NULL );
+       if ( nchars > 0 )
+       {
+           str.resize(nchars);
+           ::WideCharToMultiByte( CP_UTF8, 0, wstr.data(), (int)wstr.length(),
+                                  const_cast<char *>(str.c_str()), nchars, NULL, NULL );
+       }
+
+       return str;
+   }
+   #endif
+
+   bool Canonicalize(const char *path, char *resolved_path)
+   {
+#ifdef _WIN32
+       std::wstring wpath = ToStdWString( path );
+       std::wstring wresolved_path;
+       wresolved_path.resize( PATH_MAX );
+       if ( PathCanonicalizeW( const_cast<wchar_t *>(wresolved_path.data()), wpath.c_str() ) )
+       {
+           std::string path = ToStdString(wresolved_path);
+           strcpy_s( resolved_path, path.length() * sizeof( char ), path.c_str() );
+
+           return true;
+       }
+
+       return false;
+#else
+       return realpath(path, resolved_path);
+#endif
+   }
+}
+
+static bool isResourcePathSafe(const std::string& baseDir, const std::string& userPath)
+{
+    char resolvedBase[PATH_MAX] = {};
+    char resolvedTarget[PATH_MAX] = {};
+
+    // Resolve base directory
+    if (!Canonicalize(baseDir.c_str(), resolvedBase))
+    {
+
+#ifdef DEBUG_PARSER
+        vWarning << "Error: Cannot resolve base path: " << baseDir.c_str();
+#endif
+        return false;
+    }
+
+    // Resolve target path
+    std::string fullPath = baseDir;
+    if (!baseDir.empty() && baseDir.back() != '/') fullPath += "/";
+    fullPath += userPath;
+
+    if (!Canonicalize(fullPath.c_str(), resolvedTarget)) {
+#ifdef DEBUG_PARSER
+        vWarning << "Error: Cannot resolve target path: " << fullPath.c_str();
+#endif
+        return false;
+    }
+
+    std::string base(resolvedBase);
+    std::string target(resolvedTarget);
+
+    // Ensure target starts with base
+    bool result = target.compare(0, base.length(), base) == 0 &&
+         (target.length() == base.length() || target[base.length()] == '/');
+
+    if (!result) {
+#ifdef DEBUG_PARSER
+        vWarning << "Error: Dangerous path blocked: " << fullPath.c_str();
+#endif
+    }
+    return result;
+}
+
 /*
  *  std::to_string() function is missing in VS2017
  *  so this is workaround for windows build
@@ -819,7 +963,7 @@ model::Asset *LottieParserImpl::parseAsset()
     auto        asset = allocator().make<model::Asset>();
     std::string filename;
     std::string relativePath;
-    bool        embededResource = false;
+    bool        embeddedResource = false;
     EnterObject();
     while (const char *key = NextObjectKey()) {
         if (0 == strcmp(key, "w")) {
@@ -832,7 +976,7 @@ model::Asset *LottieParserImpl::parseAsset()
         } else if (0 == strcmp(key, "u")) { /* relative image path */
             relativePath = GetStringObject();
         } else if (0 == strcmp(key, "e")) { /* relative image path */
-            embededResource = GetInt();
+            embeddedResource = GetInt();
         } else if (0 == strcmp(key, "id")) { /* reference id*/
             if (PeekType() == kStringType) {
                 asset->mRefId = GetStringObject();
@@ -859,14 +1003,18 @@ model::Asset *LottieParserImpl::parseAsset()
         }
     }
 
-    if (asset->mAssetType == model::Asset::Type::Image) {
-        if (embededResource) {
-            // embeder resource should start with "data:"
-            if (filename.compare(0, 5, "data:") == 0) {
+    if (asset->mAssetType == model::Asset::Type::Image && !filename.empty()) {
+        if (embeddedResource) {
+            // embedded resource should start with "data:"
+            // URL Scheme: "data:[<mediatype>][;base64],<data>"
+            if (filename.compare(0, 5, "data:") == 0 && filename.find(',') != std::string::npos) {
                 asset->loadImageData(convertFromBase64(filename));
             }
         } else {
-            asset->loadImagePath(mDirPath + relativePath + filename);
+            // reject dangerous paths
+            if (isResourcePathSafe(mDirPath, relativePath + filename)) {
+                asset->loadImagePath(mDirPath + relativePath + filename);
+            }
         }
     }
 
@@ -2368,17 +2516,16 @@ public:
 
 static char* uncompressZip(const char * str, size_t length)
 {
-    const char* errMsg = "Failed to unzip dotLottie!";
-
     auto zip = zip_stream_open(str, length, 0, 'r');
     if (!zip) {
-        vCritical << errMsg;
+        vCritical << "Failed to unzip dotLottie: read fail!";
         return nullptr;
     }
 
-    //Read a representive animation
+    // Read a representative animation
     if (zip_entry_openbyindex(zip, 1)) {
-        vCritical << errMsg;
+        vCritical << "Failed to unzip dotLottie: open by index fail!";
+        zip_stream_close(zip);
         return nullptr;
     }
 
@@ -2389,7 +2536,20 @@ static char* uncompressZip(const char * str, size_t length)
     zip_entry_close(zip);
     zip_stream_close(zip);
 
-    return buf;
+    if (buf == nullptr || bufSize == 0) {
+        vCritical << "Failed to unzip dotLottie: buffer is empty!";
+        return nullptr;
+    }
+
+    char* terminatedBuf = static_cast<char*>(realloc(buf, bufSize + 1));
+    if (!terminatedBuf) {
+        free(buf);
+        vCritical << "Failed to unzip dotLottie: failed to allocate!";
+        return nullptr;
+    }
+
+    terminatedBuf[bufSize] = '\0';
+    return terminatedBuf;
 }
 
 static bool checkDotLottie(const char * str)
@@ -2397,6 +2557,32 @@ static bool checkDotLottie(const char * str)
     //check the .Lottie signature.
     if (str[0] == 0x50 && str[1] == 0x4B && str[2] == 0x03 && str[3] == 0x04) return true;
     else return false;
+}
+
+std::shared_ptr<model::Composition> parseImpl(char* input,
+                                              std::string dir_path,
+                                              model::ColorFilter filter)
+{
+    LottieParserImpl obj(input, std::move(dir_path), std::move(filter));
+
+    if (!obj.VerifyType()) {
+        vWarning << "Input data is not Lottie format!";
+        return {};
+    }
+
+    obj.parseComposition();
+    auto composition = obj.composition();
+    if (composition) {
+        composition->processRepeaterObjects();
+        composition->updateStats();
+
+#ifdef LOTTIE_DUMP_TREE_SUPPORT
+        ObjectInspector inspector;
+        inspector.visit(composition.get(), "");
+#endif
+    }
+
+    return composition;
 }
 
 std::shared_ptr<model::Composition> model::parse(char *             str,
@@ -2409,30 +2595,16 @@ std::shared_ptr<model::Composition> model::parse(char *             str,
     auto dotLottie = checkDotLottie(str);
     if (dotLottie) {
         input = uncompressZip(str, length);
-    }
-
-    LottieParserImpl obj(input, std::move(dir_path), std::move(filter));
-
-    if (dotLottie) free(input);
-
-    if (obj.VerifyType()) {
-        obj.parseComposition();
-        auto composition = obj.composition();
-        if (composition) {
-            composition->processRepeaterObjects();
-            composition->updateStats();
-
-#ifdef LOTTIE_DUMP_TREE_SUPPORT
-            ObjectInspector inspector;
-            inspector.visit(composition.get(), "");
-#endif
-
-            return composition;
+        if (!input) {
+            vWarning << "Failed to decompress .lottie archive.";
+            return {};
         }
     }
 
-    vWarning << "Input data is not Lottie format!";
-    return {};
+    auto result = parseImpl(input, std::move(dir_path), std::move(filter));
+
+    if (dotLottie) free(input);
+    return result;
 }
 
 RAPIDJSON_DIAG_POP
